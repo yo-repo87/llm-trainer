@@ -1,0 +1,26 @@
+services:
+  llm-trainer:
+    build: .
+    container_name: llm-trainer
+    ports:
+      - "8100:8000"
+    volumes:
+      - ./data:/app/data
+      - hf-cache:/app/data/hf_cache
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11435
+      - PORT=8000
+    # Uncomment to pass GPU (requires nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

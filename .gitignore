@@ -1,0 +1,15 @@
+# Runtime data: models, datasets, caches, DB, outputs
+data/
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Secrets
+gitkey

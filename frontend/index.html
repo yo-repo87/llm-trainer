@@ -1,0 +1,2163 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Trainer for Ollama</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root { --sidebar-w: 220px; }
+body { overflow-x: hidden; font-size: 0.92rem; background: #0d1117; }
+#sidebar {
+  width: var(--sidebar-w); min-height: 100vh;
+  background: #161b22; border-right: 1px solid #30363d;
+  position: fixed; top: 0; left: 0; z-index: 100;
+  display: flex; flex-direction: column;
+}
+#sidebar .logo { padding: 1.2rem 1rem; border-bottom: 1px solid #30363d; }
+#sidebar .logo h6 { color: #58a6ff; font-weight: 700; margin: 0; font-size: 1rem; }
+#sidebar .logo small { color: #8b949e; font-size: 0.75rem; }
+#sidebar nav .nav-link {
+  color: #c9d1d9; border-radius: 6px; margin: 2px 8px;
+  padding: 0.5rem 0.75rem; display: flex; align-items: center; gap: 8px;
+  transition: all 0.15s;
+}
+#sidebar nav .nav-link:hover { background: #21262d; color: #58a6ff; }
+#sidebar nav .nav-link.active { background: #1f6feb33; color: #58a6ff; font-weight: 600; }
+#sidebar .sys-info { padding: 0.75rem; margin: auto 0 0 0; border-top: 1px solid #30363d; font-size: 0.75rem; color: #8b949e; }
+#main { margin-left: var(--sidebar-w); padding: 1.5rem; min-height: 100vh; }
+.page { display: none; }
+.page.active { display: block; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; }
+.card-header { background: #21262d; border-bottom: 1px solid #30363d; }
+.stat-card { text-align: center; padding: 1rem; }
+.stat-card .val { font-size: 1.6rem; font-weight: 700; color: #58a6ff; }
+.stat-card .lbl { font-size: 0.75rem; color: #8b949e; }
+.badge-status-pending  { background: #6e7681; }
+.badge-status-running  { background: #1f6feb; }
+.badge-status-completed{ background: #238636; }
+.badge-status-failed   { background: #da3633; }
+.badge-status-cancelled{ background: #6e7681; }
+#log-box {
+  background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+  height: 320px; overflow-y: auto; font-family: monospace; font-size: 0.8rem;
+  padding: 0.75rem; color: #c9d1d9; white-space: pre-wrap;
+}
+#log-box .log-info    { color: #79c0ff; }
+#log-box .log-train   { color: #56d364; }
+#log-box .log-warn    { color: #e3b341; }
+#log-box .log-error   { color: #f85149; }
+#log-box .log-success { color: #3fb950; font-weight: 600; }
+.progress { height: 6px; border-radius: 3px; }
+.form-label { color: #8b949e; font-size: 0.82rem; font-weight: 500; }
+.form-control, .form-select {
+  background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+}
+.form-control:focus, .form-select:focus {
+  background: #0d1117; border-color: #58a6ff; color: #c9d1d9; box-shadow: 0 0 0 3px #1f6feb33;
+}
+.form-range { accent-color: #58a6ff; }
+.table { color: #c9d1d9; }
+.table thead th { border-color: #30363d; color: #8b949e; font-size: 0.78rem; font-weight: 600; }
+.table td { border-color: #21262d; vertical-align: middle; }
+.btn-primary   { background: #1f6feb; border-color: #1f6feb; }
+.btn-primary:hover { background: #388bfd; }
+.btn-success   { background: #238636; border-color: #238636; }
+.btn-danger    { background: #da3633; border-color: #da3633; }
+textarea.code-editor {
+  font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.82rem;
+  background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+  min-height: 220px; resize: vertical;
+}
+.chip {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: 0.72rem; font-weight: 600;
+}
+#ollama-indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.loss-chart-wrap { position: relative; height: 180px; }
+.dataset-preview pre { background: #0d1117; padding: 0.75rem; border-radius: 6px; font-size: 0.78rem; max-height: 200px; overflow: auto; }
+.scrollbar-thin::-webkit-scrollbar { width: 5px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div id="sidebar">
+  <div class="logo">
+    <h6><i class="bi bi-cpu-fill me-2"></i>LLM Trainer</h6>
+    <small>for Ollama</small>
+  </div>
+  <nav class="mt-2 flex-grow-1">
+    <a class="nav-link active" href="#" data-page="dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
+    <a class="nav-link" href="#" data-page="datasets"><i class="bi bi-database"></i> Datasets</a>
+    <a class="nav-link" href="#" data-page="training"><i class="bi bi-lightning-charge-fill"></i> Fine-tune</a>
+    <a class="nav-link" href="#" data-page="convert"><i class="bi bi-arrow-left-right"></i> Convert to GGUF</a>
+    <a class="nav-link" href="#" data-page="modelfile"><i class="bi bi-file-earmark-code"></i> Modelfile</a>
+    <a class="nav-link" href="#" data-page="ollama"><i class="bi bi-cloud-arrow-up-fill"></i> Ollama</a>
+    <a class="nav-link" href="#" data-page="pretrain"><i class="bi bi-stars"></i> Pre-train</a>
+    <a class="nav-link" href="#" data-page="distill"><i class="bi bi-diagram-3-fill"></i> Distill</a>
+    <a class="nav-link" href="#" data-page="test"><i class="bi bi-chat-dots-fill"></i> Test Model</a>
+  </nav>
+  <div class="sys-info">
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <span id="ollama-indicator" style="background:#da3633"></span>
+      <span id="ollama-status-text">Ollama: checking...</span>
+    </div>
+    <div id="sys-cpu">CPU: --</div>
+    <div id="sys-ram">RAM: --</div>
+    <div id="sys-gpu">GPU: --</div>
+    <div id="sys-vram" class="d-none">VRAM: --</div>
+  </div>
+</div>
+
+<!-- Main content -->
+<div id="main">
+
+<!-- DASHBOARD -->
+<div class="page active" id="page-dashboard">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0 fw-bold">Dashboard</h4>
+    <button class="btn btn-sm btn-outline-secondary" onclick="loadDashboard()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+  </div>
+  <div class="row g-3 mb-4" id="dash-stats">
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="val" id="stat-jobs">--</div><div class="lbl">Total Jobs</div></div></div>
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="val" id="stat-ds">--</div><div class="lbl">Datasets</div></div></div>
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="val" id="stat-models">--</div><div class="lbl">GGUF Models</div></div></div>
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="val" id="stat-ollama">--</div><div class="lbl">Ollama Models</div></div></div>
+  </div>
+  <div class="row g-3">
+    <div class="col-12 col-lg-7">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-600"><i class="bi bi-list-check me-1"></i>Recent Jobs</span>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Created</th></tr></thead>
+            <tbody id="dash-jobs"><tr><td colspan="4" class="text-center text-muted py-3">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-5">
+      <div class="card">
+        <div class="card-header"><span class="fw-600"><i class="bi bi-hdd-fill me-1"></i>Storage</span></div>
+        <div class="card-body">
+          <div id="disk-info" class="text-muted">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DATASETS -->
+<div class="page" id="page-datasets">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0 fw-bold">Datasets</h4>
+    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+      <i class="bi bi-upload me-1"></i>Upload
+    </button>
+  </div>
+  <div class="card">
+    <div class="card-body p-0">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Name</th><th>Format</th><th>Rows</th><th>Size</th><th>Actions</th></tr></thead>
+        <tbody id="ds-table"><tr><td colspan="5" class="text-center text-muted py-3">No datasets yet</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="ds-preview-section" class="mt-3 d-none">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <span class="fw-600">Preview — <span id="preview-ds-name"></span></span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('ds-preview-section').classList.add('d-none')">Close</button>
+      </div>
+      <div class="card-body dataset-preview" id="ds-preview-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- FINE-TUNE -->
+<div class="page" id="page-training">
+  <h4 class="mb-3 fw-bold">Fine-tune with LoRA / QLoRA</h4>
+  <div class="row g-3">
+    <div class="col-12 col-xl-5">
+      <div class="card">
+        <div class="card-header fw-600"><i class="bi bi-sliders me-1"></i>Training Config</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Dataset</label>
+            <select class="form-select" id="train-ds-select"><option>Loading...</option></select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Base Model (HuggingFace)</label>
+            <input class="form-control" id="train-base-model" value="TinyLlama/TinyLlama-1.1B-Chat-v1.0" placeholder="e.g. mistralai/Mistral-7B-v0.1">
+            <div class="form-text">Model will be downloaded from HuggingFace Hub</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Output Name</label>
+            <input class="form-control" id="train-output-name" value="my-finetune" placeholder="Name for saved adapter">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Instruction Template</label>
+            <select class="form-select" id="train-template">
+              <option value="alpaca">Alpaca (instruction/output)</option>
+              <option value="chatml">ChatML (messages[])</option>
+              <option value="text">Plain text</option>
+            </select>
+          </div>
+          <hr class="border-secondary">
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label">LoRA Rank (r)</label>
+              <input type="number" class="form-control" id="lora-r" value="8" min="1" max="128">
+            </div>
+            <div class="col-6">
+              <label class="form-label">LoRA Alpha</label>
+              <input type="number" class="form-control" id="lora-alpha" value="16" min="1">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Epochs</label>
+              <input type="number" class="form-control" id="train-epochs" value="3" min="1" max="100">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Batch Size</label>
+              <input type="number" class="form-control" id="train-batch" value="4" min="1">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Learning Rate</label>
+              <input class="form-control" id="train-lr" value="2e-4">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Max Seq Length</label>
+              <input type="number" class="form-control" id="train-seqlen" value="512" min="64">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Grad Accumulation</label>
+              <input type="number" class="form-control" id="train-grad-acc" value="4" min="1">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Warmup Steps</label>
+              <input type="number" class="form-control" id="train-warmup" value="10" min="0">
+            </div>
+          </div>
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" id="train-4bit" checked>
+            <label class="form-check-label" for="train-4bit">Use 4-bit Quantization (QLoRA) — saves VRAM</label>
+          </div>
+          <button class="btn btn-primary w-100 mt-3" onclick="startTraining()">
+            <i class="bi bi-play-fill me-1"></i>Start Training
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-xl-7">
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-600"><i class="bi bi-terminal me-1"></i>Training Log</span>
+          <div class="d-flex gap-2 align-items-center">
+            <span id="train-status-badge" class="badge">Idle</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearLog()">Clear</button>
+          </div>
+        </div>
+        <div id="train-progress-wrap" class="px-2 pt-2 d-none">
+          <div class="d-flex justify-content-between align-items-center mb-1" style="font-size:0.8rem;color:#8b949e;">
+            <span id="train-step-label">Step 0 / 0</span>
+            <span id="train-epoch-label">Epoch 0</span>
+            <span id="train-eta-label">ETA: --</span>
+          </div>
+          <div class="progress mb-2" style="height:8px;">
+            <div id="train-progress-bar" class="progress-bar bg-primary progress-bar-striped progress-bar-animated" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="card-body p-2">
+          <div id="log-box" class="scrollbar-thin"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header fw-600"><i class="bi bi-graph-up me-1"></i>Loss Curve</div>
+        <div class="card-body">
+          <div class="loss-chart-wrap"><canvas id="loss-chart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="fw-600">Training History</span>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadTrainingJobs()"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Job ID</th><th>Model</th><th>Dataset</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody id="train-history"><tr><td colspan="6" class="text-center text-muted py-3">No jobs yet</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- CONVERT TO GGUF -->
+<div class="page" id="page-convert">
+  <h4 class="mb-3 fw-bold">Convert Model to GGUF</h4>
+  <div class="row g-3">
+    <div class="col-12 col-lg-5">
+      <div class="card">
+        <div class="card-header fw-600"><i class="bi bi-arrow-left-right me-1"></i>Conversion Settings</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Source — Fine-tuned Adapter or HF Model Path</label>
+            <select class="form-select mb-2" id="conv-adapter-select" onchange="onAdapterSelect()">
+              <option value="">-- Select from fine-tuned adapters --</option>
+            </select>
+            <input class="form-control" id="conv-source" placeholder="Or enter path manually: /path/to/model">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Base Model (needed if source is LoRA adapter)</label>
+            <input class="form-control" id="conv-base" placeholder="e.g. TinyLlama/TinyLlama-1.1B-Chat-v1.0">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Output Name</label>
+            <input class="form-control" id="conv-out-name" placeholder="my-model">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Quantization</label>
+            <select class="form-select" id="conv-quant">
+              <option value="q4_k_m">Q4_K_M — Best size/quality (recommended)</option>
+              <option value="q5_k_m">Q5_K_M — Better quality, larger</option>
+              <option value="q8_0">Q8_0 — Near-lossless, largest</option>
+              <option value="q2_k">Q2_K — Smallest, lowest quality</option>
+              <option value="f16">F16 — No quantization</option>
+            </select>
+          </div>
+          <div class="alert alert-info py-2 small">
+            <i class="bi bi-info-circle me-1"></i>
+            Conversion requires llama.cpp to be built inside the container. The Dockerfile handles this automatically.
+          </div>
+          <button class="btn btn-primary w-100" onclick="startConversion()">
+            <i class="bi bi-arrow-left-right me-1"></i>Convert to GGUF
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-7">
+      <div class="card mb-3">
+        <div class="card-header fw-600"><i class="bi bi-terminal me-1"></i>Conversion Log</div>
+        <div class="card-body p-2">
+          <div id="conv-log-box" class="scrollbar-thin" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;height:220px;overflow-y:auto;font-family:monospace;font-size:0.8rem;padding:0.75rem;color:#c9d1d9;white-space:pre-wrap;"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-600"><i class="bi bi-hdd me-1"></i>GGUF Models</span>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadGGUFModels()"><i class="bi bi-arrow-clockwise"></i></button>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>Name</th><th>Quant</th><th>Size</th><th>Actions</th></tr></thead>
+            <tbody id="gguf-table"><tr><td colspan="4" class="text-center text-muted py-3">No models yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODELFILE -->
+<div class="page" id="page-modelfile">
+  <h4 class="mb-3 fw-bold">Ollama Modelfile Creator</h4>
+  <div class="row g-3">
+    <div class="col-12 col-lg-4">
+      <div class="card mb-3">
+        <div class="card-header fw-600">Templates</div>
+        <div class="card-body">
+          <div class="mb-2">
+            <label class="form-label">Model Path / Name</label>
+            <select class="form-select mb-2" id="mf-model-select" onchange="onMfModelSelect()">
+              <option value="">-- Select GGUF model --</option>
+            </select>
+            <input class="form-control" id="mf-model-path" placeholder="Or path: /data/models/my-model.gguf">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Modelfile Name</label>
+            <input class="form-control" id="mf-name" placeholder="my-custom-model">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Template</label>
+            <select class="form-select" id="mf-template-select" onchange="loadMfTemplate()">
+              <option value="basic">Basic</option>
+              <option value="chat">Chat Assistant</option>
+              <option value="code">Code Expert</option>
+              <option value="custom_gguf">Custom GGUF</option>
+            </select>
+          </div>
+          <button class="btn btn-outline-secondary w-100 mb-2" onclick="loadMfTemplate()">Apply Template</button>
+          <button class="btn btn-primary w-100" onclick="saveModelfile()">
+            <i class="bi bi-save me-1"></i>Save Modelfile
+          </button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-600">Saved Modelfiles</span>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadModelfiles()"><i class="bi bi-arrow-clockwise"></i></button>
+        </div>
+        <div class="list-group list-group-flush" id="mf-list" style="max-height:200px;overflow-y:auto;">
+          <div class="list-group-item text-muted small">No modelfiles saved</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-8">
+      <div class="card h-100">
+        <div class="card-header fw-600"><i class="bi bi-code-slash me-1"></i>Modelfile Editor</div>
+        <div class="card-body d-flex flex-column">
+          <textarea class="form-control code-editor flex-grow-1" id="mf-editor" style="min-height:350px;" placeholder="FROM /path/to/model.gguf&#10;&#10;SYSTEM &quot;&quot;&quot;&#10;You are a helpful assistant.&#10;&quot;&quot;&quot;&#10;&#10;PARAMETER temperature 0.7&#10;PARAMETER num_ctx 4096"></textarea>
+          <div class="mt-2 d-flex gap-2">
+            <button class="btn btn-success" onclick="pushModelfileToOllama()">
+              <i class="bi bi-cloud-upload me-1"></i>Create in Ollama
+            </button>
+            <button class="btn btn-outline-secondary" onclick="copyModelfile()">
+              <i class="bi bi-clipboard me-1"></i>Copy
+            </button>
+          </div>
+          <div class="mt-2 p-2 rounded small" style="background:#0d1117;color:#8b949e;">
+            <strong class="text-info">Modelfile reference:</strong><br>
+            <code>FROM</code> &lt;model-path-or-name&gt;<br>
+            <code>SYSTEM</code> """Your system prompt"""<br>
+            <code>PARAMETER temperature</code> 0.7<br>
+            <code>PARAMETER num_ctx</code> 4096<br>
+            <code>PARAMETER stop</code> "&lt;|end|&gt;"<br>
+            <code>TEMPLATE</code> """{{- if .System }}&lt;|system|&gt;...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OLLAMA -->
+<div class="page" id="page-ollama">
+  <h4 class="mb-3 fw-bold">Ollama Management</h4>
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-md-6">
+      <div class="card">
+        <div class="card-header fw-600"><i class="bi bi-cloud-download me-1"></i>Pull Model from Registry</div>
+        <div class="card-body">
+          <div class="input-group">
+            <input class="form-control" id="pull-model-input" placeholder="e.g. llama2:7b, mistral, phi3:mini">
+            <button class="btn btn-primary" onclick="pullOllamaModel()">Pull</button>
+          </div>
+          <div id="pull-status" class="mt-2 small text-muted"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6">
+      <div class="card">
+        <div class="card-header fw-600"><i class="bi bi-info-circle me-1"></i>Ollama Connection</div>
+        <div class="card-body">
+          <div id="ollama-detail-status" class="text-muted small">Checking...</div>
+          <button class="btn btn-sm btn-outline-secondary mt-2" onclick="checkOllama()">Recheck</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="fw-600"><i class="bi bi-grid me-1"></i>Installed Models</span>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadOllamaModels()"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Name</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead>
+        <tbody id="ollama-models-table"><tr><td colspan="4" class="text-center text-muted py-3">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- PRE-TRAIN -->
+<div class="page" id="page-pretrain">
+  <h4 class="mb-1 fw-bold">Pre-train a New LLM from Scratch</h4>
+  <p class="text-muted small mb-3">Define an architecture, feed it a text corpus, and train a brand-new model with no borrowed weights.</p>
+
+  <div class="row g-3">
+    <!-- Left: Architecture + Config -->
+    <div class="col-12 col-xl-5">
+
+      <!-- Architecture presets -->
+      <div class="card mb-3">
+        <div class="card-header fw-600"><i class="bi bi-cpu me-1"></i>Model Architecture</div>
+        <div class="card-body">
+          <div class="row g-2 mb-3" id="preset-cards">
+            <!-- filled by JS -->
+          </div>
+          <div id="custom-arch-section">
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label">Layers</label>
+                <input type="number" class="form-control" id="pt-n-layer" value="6" min="1" max="48" oninput="updateParamCount()">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Attention Heads</label>
+                <input type="number" class="form-control" id="pt-n-head" value="6" min="1" max="64" oninput="updateParamCount()">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Hidden Size (d_model)</label>
+                <input type="number" class="form-control" id="pt-n-embd" value="384" min="64" step="64" oninput="updateParamCount()">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Context Length</label>
+                <input type="number" class="form-control" id="pt-n-pos" value="512" min="64" max="4096" step="64" oninput="updateParamCount()">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Vocab Size</label>
+                <input type="number" class="form-control" id="pt-vocab" value="8000" min="256" max="65536" oninput="updateParamCount()">
+              </div>
+            </div>
+          </div>
+          <!-- Live stats -->
+          <div class="mt-3 p-2 rounded" style="background:#0d1117;border:1px solid #30363d;">
+            <div class="row g-0 text-center">
+              <div class="col-4">
+                <div class="small text-muted">Parameters</div>
+                <div class="fw-600 text-info" id="pt-param-count">--</div>
+              </div>
+              <div class="col-4">
+                <div class="small text-muted">Est. VRAM</div>
+                <div class="fw-600 text-warning" id="pt-vram-est">--</div>
+              </div>
+              <div class="col-4">
+                <div class="small text-muted">Device</div>
+                <div class="fw-600 text-success" id="pt-device-rec">--</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dataset + Tokenizer -->
+      <div class="card mb-3">
+        <div class="card-header fw-600"><i class="bi bi-database me-1"></i>Corpus &amp; Tokenizer</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Training Corpus (Dataset)</label>
+            <select class="form-select" id="pt-dataset"><option>Loading...</option></select>
+            <div class="form-text">Plain text or JSONL with a "text" field. More text = better model.</div>
+          </div>
+          <div class="mb-2">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="pt-train-tok" checked onchange="toggleTokInfo()">
+              <label class="form-check-label" for="pt-train-tok">Train custom BPE tokenizer on this corpus</label>
+            </div>
+          </div>
+          <div id="pt-tok-info" class="alert alert-info py-2 small mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            A new BPE tokenizer will be trained on your corpus using the vocab size above.
+            Better for domain-specific text (code, medical, etc.).
+          </div>
+          <div id="pt-gpt2-tok-info" class="alert alert-secondary py-2 small mb-0 d-none">
+            <i class="bi bi-info-circle me-1"></i>
+            Will use the pre-existing GPT-2 tokenizer (50,257 vocab). Good for general English text.
+          </div>
+        </div>
+      </div>
+
+      <!-- Training hyperparams -->
+      <div class="card">
+        <div class="card-header fw-600"><i class="bi bi-sliders me-1"></i>Training Config</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Model Name</label>
+            <input class="form-control" id="pt-model-name" value="my-llm" placeholder="my-llm">
+          </div>
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label">Training Steps</label>
+              <input type="number" class="form-control" id="pt-steps" value="5000" min="100">
+              <div class="form-text">1k–5k for small models</div>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Batch Size</label>
+              <input type="number" class="form-control" id="pt-batch" value="8" min="1">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Learning Rate</label>
+              <input class="form-control" id="pt-lr" value="3e-4">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Warmup Steps</label>
+              <input type="number" class="form-control" id="pt-warmup" value="200" min="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Grad Accumulation</label>
+              <input type="number" class="form-control" id="pt-grad-acc" value="4" min="1">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Save Every N Steps</label>
+              <input type="number" class="form-control" id="pt-save-every" value="500" min="50">
+            </div>
+          </div>
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" id="pt-fp16" checked>
+            <label class="form-check-label" for="pt-fp16">Mixed precision FP16 (CUDA only — faster training)</label>
+          </div>
+          <button class="btn btn-primary w-100 mt-3" onclick="startPretrain()">
+            <i class="bi bi-stars me-1"></i>Start Pre-training
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Log + Charts + Checkpoints -->
+    <div class="col-12 col-xl-7">
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-600"><i class="bi bi-terminal me-1"></i>Training Log</span>
+          <div class="d-flex gap-2 align-items-center">
+            <span id="pt-status-badge" class="badge" style="background:#6e7681">Idle</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('pt-log-box').innerHTML=''">Clear</button>
+          </div>
+        </div>
+        <div class="card-body p-2">
+          <div id="pt-log-box" class="scrollbar-thin"
+            style="background:#0d1117;border:1px solid #30363d;border-radius:6px;height:260px;overflow-y:auto;font-family:monospace;font-size:0.8rem;padding:0.75rem;color:#c9d1d9;white-space:pre-wrap;"></div>
+        </div>
+      </div>
+
+      <!-- Loss + Perplexity charts -->
+      <div class="card mb-3">
+        <div class="card-header fw-600"><i class="bi bi-graph-down me-1"></i>Loss &amp; Perplexity</div>
+        <div class="card-body">
+          <div class="row g-2">
+            <div class="col-6" style="position:relative;height:160px;"><canvas id="pt-loss-chart"></canvas></div>
+            <div class="col-6" style="position:relative;height:160px;"><canvas id="pt-ppl-chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Saved models / checkpoints -->
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-600"><i class="bi bi-hdd-stack me-1"></i>Pre-trained Models &amp; Checkpoints</span>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadPretrainCheckpoints()"><i class="bi bi-arrow-clockwise"></i></button>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>Name</th><th>Size</th><th>Arch</th><th>Checkpoints</th><th>Actions</th></tr></thead>
+            <tbody id="pt-checkpoints-table"><tr><td colspan="5" class="text-center text-muted py-3">No pre-trained models yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DISTILL -->
+<div class="page" id="page-distill">
+  <h4 class="mb-1 fw-bold">Teacher → Student Training</h4>
+  <p class="text-muted small mb-3">Teach a smaller student model to mimic a larger teacher model using knowledge distillation.</p>
+
+  <!-- Mode selector -->
+  <ul class="nav nav-tabs mb-3" id="distill-tabs">
+    <li class="nav-item">
+      <a class="nav-link active" href="#" data-distill-tab="generate">
+        <i class="bi bi-cloud-arrow-down me-1"></i>Step 1 — Generate Dataset from Teacher
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" href="#" data-distill-tab="kd">
+        <i class="bi bi-diagram-3 me-1"></i>Step 2 — Knowledge Distillation Training
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" href="#" data-distill-tab="history">
+        <i class="bi bi-clock-history me-1"></i>History
+      </a>
+    </li>
+  </ul>
+
+  <!-- Tab: Generate Dataset -->
+  <div id="distill-tab-generate">
+    <div class="row g-3">
+      <div class="col-12 col-lg-5">
+        <div class="card">
+          <div class="card-header fw-600"><i class="bi bi-robot me-1"></i>Teacher (Ollama Model)</div>
+          <div class="card-body">
+            <div class="alert alert-info py-2 small">
+              <i class="bi bi-info-circle me-1"></i>
+              The teacher Ollama model generates high-quality responses that become the student's training data.
+              No GPU needed for this step — the teacher runs via Ollama.
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Teacher Model (Ollama)</label>
+              <select class="form-select" id="gen-teacher-model">
+                <option>Loading Ollama models...</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">System Prompt for Teacher</label>
+              <textarea class="form-control" id="gen-system-prompt" rows="2" placeholder="You are a helpful, expert assistant. Answer clearly and thoroughly."></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Prompts Source</label>
+              <select class="form-select" id="gen-source-type" onchange="toggleGenSource()">
+                <option value="dataset">From existing dataset</option>
+                <option value="inline">Enter prompts manually</option>
+              </select>
+            </div>
+            <div id="gen-dataset-row" class="mb-3">
+              <label class="form-label">Dataset</label>
+              <select class="form-select" id="gen-dataset-select">
+                <option>Loading...</option>
+              </select>
+              <div class="mt-2">
+                <label class="form-label">Prompt field in dataset</label>
+                <input class="form-control" id="gen-prompt-field" value="instruction" placeholder="instruction / text / question">
+              </div>
+            </div>
+            <div id="gen-inline-row" class="mb-3 d-none">
+              <label class="form-label">Prompts (one per line)</label>
+              <textarea class="form-control" id="gen-inline-prompts" rows="6"
+                placeholder="What is the capital of France?&#10;Explain quantum entanglement in simple terms.&#10;Write a Python function to sort a list."></textarea>
+            </div>
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <label class="form-label">Temperature</label>
+                <input type="number" class="form-control" id="gen-temp" value="0.7" step="0.05" min="0" max="2">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Max Tokens / Response</label>
+                <input type="number" class="form-control" id="gen-max-tokens" value="512" min="64">
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Output Dataset Name</label>
+              <input class="form-control" id="gen-output-name" value="teacher_generated" placeholder="teacher_generated">
+            </div>
+            <button class="btn btn-primary w-100" onclick="startGenerateDataset()">
+              <i class="bi bi-play-fill me-1"></i>Generate Dataset from Teacher
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-7">
+        <div class="card h-100">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-600"><i class="bi bi-terminal me-1"></i>Generation Log</span>
+            <span id="gen-status-badge" class="badge" style="background:#6e7681">Idle</span>
+          </div>
+          <div class="card-body p-2 d-flex flex-column">
+            <div id="gen-log-box" class="scrollbar-thin flex-grow-1"
+              style="background:#0d1117;border:1px solid #30363d;border-radius:6px;min-height:300px;overflow-y:auto;font-family:monospace;font-size:0.8rem;padding:0.75rem;color:#c9d1d9;white-space:pre-wrap;"></div>
+            <div id="gen-result-banner" class="d-none mt-2 alert alert-success py-2 small">
+              <i class="bi bi-check-circle me-1"></i>
+              Dataset generated! <strong id="gen-result-text"></strong>
+              <button class="btn btn-sm btn-success ms-2" onclick="useGeneratedDataset()">Use for KD Training →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: KD Training -->
+  <div id="distill-tab-kd" class="d-none">
+    <div class="row g-3">
+      <div class="col-12 col-xl-5">
+        <div class="card">
+          <div class="card-header fw-600"><i class="bi bi-sliders me-1"></i>Distillation Config</div>
+          <div class="card-body">
+            <div class="alert alert-warning py-2 small">
+              <i class="bi bi-exclamation-triangle me-1"></i>
+              Both models are loaded simultaneously. Requires significant RAM/VRAM.
+              Use 4-bit quantization to reduce memory usage.
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Teacher Model (HuggingFace)</label>
+              <input class="form-control" id="kd-teacher" placeholder="e.g. mistralai/Mistral-7B-v0.1">
+              <div class="form-text">Larger, more capable model — its knowledge is transferred</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Student Model (HuggingFace)</label>
+              <input class="form-control" id="kd-student" placeholder="e.g. TinyLlama/TinyLlama-1.1B-Chat-v1.0">
+              <div class="form-text">Smaller model — learns to mimic the teacher</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Training Dataset</label>
+              <select class="form-select" id="kd-dataset-select">
+                <option>Loading...</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Output Name</label>
+              <input class="form-control" id="kd-output-name" value="distilled-student">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Instruction Template</label>
+              <select class="form-select" id="kd-template">
+                <option value="alpaca">Alpaca</option>
+                <option value="chatml">ChatML</option>
+                <option value="text">Plain text</option>
+              </select>
+            </div>
+            <hr class="border-secondary">
+            <div class="fw-600 small mb-2 text-info">KD Hyperparameters</div>
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <label class="form-label">Temperature (T)</label>
+                <input type="number" class="form-control" id="kd-temp" value="4.0" step="0.5" min="1">
+                <div class="form-text">Higher = softer targets</div>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Alpha (α)</label>
+                <input type="number" class="form-control" id="kd-alpha" value="0.5" step="0.05" min="0" max="1">
+                <div class="form-text">α·CE + (1-α)·KL</div>
+              </div>
+            </div>
+            <div class="mb-2 p-2 rounded small" style="background:#0d1117;">
+              <div id="kd-loss-formula" class="text-muted">
+                Loss = <span id="kd-alpha-display">0.50</span>·CE + <span id="kd-alpha-inv-display">0.50</span>·KL(T=<span id="kd-temp-display">4.0</span>)
+              </div>
+            </div>
+            <hr class="border-secondary">
+            <div class="fw-600 small mb-2 text-info">LoRA (Student)</div>
+            <div class="row g-2 mb-3">
+              <div class="col-4"><label class="form-label">r</label><input type="number" class="form-control" id="kd-lora-r" value="8"></div>
+              <div class="col-4"><label class="form-label">Alpha</label><input type="number" class="form-control" id="kd-lora-alpha" value="16"></div>
+              <div class="col-4"><label class="form-label">Epochs</label><input type="number" class="form-control" id="kd-epochs" value="3"></div>
+              <div class="col-4"><label class="form-label">Batch</label><input type="number" class="form-control" id="kd-batch" value="2"></div>
+              <div class="col-4"><label class="form-label">LR</label><input class="form-control" id="kd-lr" value="2e-4"></div>
+              <div class="col-4"><label class="form-label">Seq Len</label><input type="number" class="form-control" id="kd-seqlen" value="512"></div>
+            </div>
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="kd-4bit-student" checked>
+                  <label class="form-check-label small" for="kd-4bit-student">4-bit Student (QLoRA)</label>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="kd-4bit-teacher" checked>
+                  <label class="form-check-label small" for="kd-4bit-teacher">4-bit Teacher</label>
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-primary w-100" onclick="startKDTraining()">
+              <i class="bi bi-lightning-charge-fill me-1"></i>Start Distillation Training
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-xl-7">
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-600"><i class="bi bi-terminal me-1"></i>Distillation Log</span>
+            <span id="kd-status-badge" class="badge" style="background:#6e7681">Idle</span>
+          </div>
+          <div class="card-body p-2">
+            <div id="kd-log-box" class="scrollbar-thin"
+              style="background:#0d1117;border:1px solid #30363d;border-radius:6px;height:280px;overflow-y:auto;font-family:monospace;font-size:0.8rem;padding:0.75rem;color:#c9d1d9;white-space:pre-wrap;"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header fw-600"><i class="bi bi-graph-up me-1"></i>Loss Curves</div>
+          <div class="card-body">
+            <div style="position:relative;height:180px;"><canvas id="kd-loss-chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: History -->
+  <div id="distill-tab-history" class="d-none">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-600">Distillation Job History</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadDistillHistory()"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Job ID</th><th>Type</th><th>Config</th><th>Status</th><th>Created</th><th>Logs</th></tr></thead>
+          <tbody id="distill-history-table"><tr><td colspan="6" class="text-center text-muted py-3">No jobs yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TEST MODEL -->
+<div class="page" id="page-test">
+  <h4 class="mb-3 fw-bold">Test Model</h4>
+  <div class="row g-3">
+    <div class="col-12 col-lg-4">
+      <div class="card">
+        <div class="card-header fw-600">Settings</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Model</label>
+            <select class="form-select" id="test-model-select"><option>Loading...</option></select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">System Prompt</label>
+            <textarea class="form-control" id="test-system" rows="3" placeholder="You are a helpful assistant."></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Temperature: <span id="test-temp-val">0.7</span></label>
+            <input type="range" class="form-range" id="test-temp" min="0" max="2" step="0.05" value="0.7"
+              oninput="document.getElementById('test-temp-val').textContent=this.value">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Max Tokens</label>
+            <input type="number" class="form-control" id="test-max-tokens" value="512">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-8">
+      <div class="card h-100">
+        <div class="card-header fw-600"><i class="bi bi-chat-dots me-1"></i>Chat</div>
+        <div class="card-body d-flex flex-column">
+          <div id="chat-messages" class="flex-grow-1 mb-3 scrollbar-thin"
+            style="min-height:300px;max-height:420px;overflow-y:auto;background:#0d1117;border-radius:6px;padding:0.75rem;">
+            <div class="text-muted small text-center mt-4">Select a model and start chatting</div>
+          </div>
+          <div class="input-group">
+            <textarea class="form-control" id="test-prompt" rows="2" placeholder="Enter your message..." onkeydown="if(event.ctrlKey&&event.key==='Enter')sendMessage()"></textarea>
+            <button class="btn btn-primary" onclick="sendMessage()"><i class="bi bi-send-fill"></i></button>
+          </div>
+          <div class="form-text">Ctrl+Enter to send</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<!-- Upload Dataset Modal -->
+<div class="modal fade" id="uploadModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:#161b22;border:1px solid #30363d;">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title">Upload Dataset</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">File (JSONL, CSV, TXT, JSON)</label>
+          <input type="file" class="form-control" id="ds-file-input" accept=".jsonl,.csv,.txt,.json">
+        </div>
+        <div class="alert alert-info py-2 small">
+          <strong>JSONL format:</strong> Each line is a JSON object:<br>
+          <code>{"instruction": "...", "input": "...", "output": "..."}</code><br>
+          <code>{"text": "..."}</code><br>
+          <code>{"messages": [{"role": "user", "content": "..."}, ...]}</code>
+        </div>
+        <div id="upload-progress" class="d-none">
+          <div class="progress mb-2"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%"></div></div>
+          <div class="text-muted small" id="upload-status">Uploading...</div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="uploadDataset()">
+          <i class="bi bi-upload me-1"></i>Upload
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+const API = '';
+let currentJobWs = null;
+let lossChart = null;
+let lossData = [];
+let convJobWs = null;
+let mfTemplates = {};
+let activeTrainJobId = null;
+
+// ─── Navigation ──────────────────────────────────────────────────────────────
+document.querySelectorAll('[data-page]').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const page = link.dataset.page;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.querySelectorAll('[data-page]').forEach(l => l.classList.remove('active'));
+    link.classList.add('active');
+    onPageLoad(page);
+  });
+});
+
+function onPageLoad(page) {
+  if (page === 'dashboard') loadDashboard();
+  if (page === 'datasets') loadDatasets();
+  if (page === 'training') { loadDatasets(); loadTrainingJobs(); }
+  if (page === 'convert') { loadOutputAdapters(); loadGGUFModels(); }
+  if (page === 'modelfile') { loadMfTemplates(); loadModelfiles(); loadMfGGUFModels(); }
+  if (page === 'ollama') loadOllamaModels();
+  if (page === 'test') loadTestModels();
+  if (page === 'pretrain') { loadPretrainDatasets(); loadPretrainCheckpoints(); }
+  if (page === 'distill') { loadDistillOllamaModels(); loadDistillDatasets(); }
+}
+
+// ─── System info ─────────────────────────────────────────────────────────────
+async function updateSysInfo() {
+  try {
+    const r = await fetch(`${API}/api/system`);
+    const d = await r.json();
+    document.getElementById('sys-cpu').textContent = `CPU: ${d.cpu_percent}%`;
+    document.getElementById('sys-ram').textContent = `RAM: ${d.ram_used_gb}/${d.ram_total_gb} GB`;
+    const vramEl = document.getElementById('sys-vram');
+    if (d.gpu) {
+      const util = d.gpu.utilization_pct != null ? ` | ${d.gpu.utilization_pct}%` : '';
+      document.getElementById('sys-gpu').textContent = `GPU: ${d.gpu.name.slice(0,16)}${util}`;
+      vramEl.textContent = `VRAM: ${d.gpu.memory_used_gb}/${d.gpu.memory_total_gb} GB`;
+      vramEl.classList.remove('d-none');
+    } else {
+      document.getElementById('sys-gpu').textContent = 'GPU: None';
+      vramEl.classList.add('d-none');
+    }
+  } catch {}
+}
+
+async function checkOllama() {
+  try {
+    const r = await fetch(`${API}/api/ollama/status`);
+    const d = await r.json();
+    const ind = document.getElementById('ollama-indicator');
+    const txt = document.getElementById('ollama-status-text');
+    const detail = document.getElementById('ollama-detail-status');
+    if (d.connected) {
+      ind.style.background = '#3fb950';
+      txt.textContent = 'Ollama: online';
+      if (detail) detail.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>Connected to ${d.url}</span>`;
+    } else {
+      ind.style.background = '#da3633';
+      txt.textContent = 'Ollama: offline';
+      if (detail) detail.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle me-1"></i>Cannot reach ${d.url}</span><br><small class="text-muted">Make sure Ollama is running and accessible</small>`;
+    }
+  } catch {}
+}
+
+setInterval(updateSysInfo, 5000);
+setInterval(checkOllama, 10000);
+updateSysInfo();
+checkOllama();
+
+// ─── Dashboard ───────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const [jobs, ds, models] = await Promise.all([
+      fetch(`${API}/api/training/jobs`).then(r=>r.json()),
+      fetch(`${API}/api/datasets/`).then(r=>r.json()),
+      fetch(`${API}/api/models/gguf`).then(r=>r.json()),
+    ]);
+    document.getElementById('stat-jobs').textContent = jobs.length;
+    document.getElementById('stat-ds').textContent = ds.length;
+    document.getElementById('stat-models').textContent = models.length;
+
+    let ollamaCount = '--';
+    try {
+      const om = await fetch(`${API}/api/ollama/models`).then(r=>r.json());
+      ollamaCount = om.models ? om.models.length : 0;
+    } catch {}
+    document.getElementById('stat-ollama').textContent = ollamaCount;
+
+    const tbody = document.getElementById('dash-jobs');
+    const allJobs = [...jobs];
+    const convJobs = await fetch(`${API}/api/models/conversions`).then(r=>r.json()).catch(()=>[]);
+    allJobs.push(...convJobs);
+    allJobs.sort((a,b) => new Date(b.created_at)-new Date(a.created_at));
+
+    tbody.innerHTML = allJobs.slice(0,8).map(j => `
+      <tr>
+        <td><code class="small">${j.id.slice(0,8)}</code></td>
+        <td><span class="chip" style="background:#21262d">${j.type}</span></td>
+        <td><span class="badge badge-status-${j.status}">${j.status}</span></td>
+        <td class="text-muted small">${new Date(j.created_at).toLocaleString()}</td>
+      </tr>`).join('') || '<tr><td colspan="4" class="text-center text-muted">No jobs</td></tr>';
+
+    const sys = await fetch(`${API}/api/system`).then(r=>r.json());
+    document.getElementById('disk-info').innerHTML = `
+      <div class="mb-2">Disk: ${sys.disk_used_gb} / ${sys.disk_total_gb} GB (${sys.disk_percent}%)</div>
+      <div class="progress mb-3"><div class="progress-bar bg-info" style="width:${sys.disk_percent}%"></div></div>
+      <div class="mb-2">RAM: ${sys.ram_used_gb} / ${sys.ram_total_gb} GB</div>
+      <div class="progress"><div class="progress-bar bg-warning" style="width:${sys.ram_percent}%"></div></div>
+      ${sys.gpu ? (() => {
+        const vramPct = sys.gpu.memory_total_gb > 0 ? Math.round(sys.gpu.memory_used_gb / sys.gpu.memory_total_gb * 100) : 0;
+        const utilBar = sys.gpu.utilization_pct != null
+          ? `<div class="mb-1">GPU Util: ${sys.gpu.utilization_pct}%</div>
+             <div class="progress mb-2"><div class="progress-bar bg-success" style="width:${sys.gpu.utilization_pct}%"></div></div>`
+          : '';
+        return `<div class="mt-2 mb-1">GPU: ${sys.gpu.name}</div>
+                ${utilBar}
+                <div class="mb-1">VRAM: ${sys.gpu.memory_used_gb}/${sys.gpu.memory_total_gb} GB</div>
+                <div class="progress"><div class="progress-bar bg-info" style="width:${vramPct}%"></div></div>`;
+      })() : ''}`;
+  } catch(e) { console.error(e); }
+}
+
+// ─── Datasets ────────────────────────────────────────────────────────────────
+async function loadDatasets() {
+  const r = await fetch(`${API}/api/datasets/`);
+  const ds = await r.json();
+  const tbody = document.getElementById('ds-table');
+  const sel = document.getElementById('train-ds-select');
+
+  tbody.innerHTML = ds.length ? ds.map(d => `
+    <tr>
+      <td>${escHtml(d.name)}</td>
+      <td><span class="chip" style="background:#21262d">${d.format}</span></td>
+      <td>${d.rows.toLocaleString()}</td>
+      <td>${fmtBytes(d.size)}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-info me-1" onclick="previewDataset('${d.id}','${escHtml(d.name)}')"><i class="bi bi-eye"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteDataset('${d.id}')"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="5" class="text-center text-muted py-3">No datasets yet — upload one above</td></tr>';
+
+  if (sel) sel.innerHTML = ds.map(d => `<option value="${d.id}">${escHtml(d.name)} (${d.rows} rows)</option>`).join('') || '<option>No datasets</option>';
+}
+
+async function uploadDataset() {
+  const fileInput = document.getElementById('ds-file-input');
+  if (!fileInput.files.length) return alert('Select a file first');
+  const prog = document.getElementById('upload-progress');
+  prog.classList.remove('d-none');
+  document.getElementById('upload-status').textContent = 'Uploading...';
+
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  try {
+    const r = await fetch(`${API}/api/datasets/upload`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Upload failed');
+    document.getElementById('upload-status').textContent = `Uploaded: ${d.rows} rows`;
+    setTimeout(() => {
+      bootstrap.Modal.getInstance(document.getElementById('uploadModal')).hide();
+      prog.classList.add('d-none');
+      loadDatasets();
+    }, 800);
+  } catch(e) {
+    document.getElementById('upload-status').textContent = `Error: ${e.message}`;
+  }
+}
+
+async function previewDataset(id, name) {
+  const sec = document.getElementById('ds-preview-section');
+  const body = document.getElementById('ds-preview-body');
+  document.getElementById('preview-ds-name').textContent = name;
+  body.innerHTML = '<div class="text-muted">Loading...</div>';
+  sec.classList.remove('d-none');
+  try {
+    const r = await fetch(`${API}/api/datasets/${id}/preview?limit=5`);
+    const d = await r.json();
+    body.innerHTML = d.samples.map(s => `<pre>${JSON.stringify(s, null, 2)}</pre>`).join('');
+  } catch(e) {
+    body.innerHTML = `<div class="text-danger">Error: ${e.message}</div>`;
+  }
+}
+
+async function deleteDataset(id) {
+  if (!confirm('Delete this dataset?')) return;
+  await fetch(`${API}/api/datasets/${id}`, { method: 'DELETE' });
+  loadDatasets();
+}
+
+// ─── Training ─────────────────────────────────────────────────────────────────
+function initLossChart() {
+  const ctx = document.getElementById('loss-chart').getContext('2d');
+  lossChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Training Loss',
+        data: [],
+        borderColor: '#58a6ff',
+        backgroundColor: '#1f6feb22',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#c9d1d9' } } },
+      scales: {
+        x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }
+      }
+    }
+  });
+}
+
+async function startTraining() {
+  const dsId = document.getElementById('train-ds-select').value;
+  if (!dsId) return alert('Select a dataset');
+  const config = {
+    dataset_id: dsId,
+    base_model: document.getElementById('train-base-model').value,
+    output_name: document.getElementById('train-output-name').value,
+    lora_r: parseInt(document.getElementById('lora-r').value),
+    lora_alpha: parseInt(document.getElementById('lora-alpha').value),
+    num_epochs: parseInt(document.getElementById('train-epochs').value),
+    batch_size: parseInt(document.getElementById('train-batch').value),
+    learning_rate: parseFloat(document.getElementById('train-lr').value),
+    max_seq_length: parseInt(document.getElementById('train-seqlen').value),
+    gradient_accumulation: parseInt(document.getElementById('train-grad-acc').value),
+    warmup_steps: parseInt(document.getElementById('train-warmup').value),
+    use_4bit: document.getElementById('train-4bit').checked,
+    instruction_template: document.getElementById('train-template').value,
+  };
+
+  const r = await fetch(`${API}/api/training/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config)
+  });
+  const d = await r.json();
+  if (!r.ok) return alert(d.detail || 'Error starting training');
+
+  activeTrainJobId = d.job_id;
+  clearLog();
+  lossData = [];
+  lossChart.data.labels = [];
+  lossChart.data.datasets[0].data = [];
+  lossChart.update();
+
+  setTrainStatus('running');
+  appendLog(`[INFO] Job started: ${d.job_id}`, 'info');
+
+  if (currentJobWs) currentJobWs.close();
+  document.getElementById('train-progress-wrap').classList.remove('d-none');
+  resetTrainProgress();
+
+  currentJobWs = new WebSocket(`ws://${location.host}/ws/${d.job_id}`);
+  currentJobWs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'log') {
+      if (!msg.message.startsWith('[PROGRESS]')) appendLog(msg.message);
+      parseLossFromLog(msg.message);
+      parseProgressFromLog(msg.message);
+    }
+    if (msg.type === 'status') {
+      setTrainStatus(msg.status);
+      if (msg.status === 'completed' || msg.status === 'failed') {
+        const bar = document.getElementById('train-progress-bar');
+        bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
+        if (msg.status === 'completed') {
+          bar.style.width = '100%';
+          bar.classList.add('bg-success');
+          bar.classList.remove('bg-primary');
+          document.getElementById('train-eta-label').textContent = 'Done';
+        }
+      }
+    }
+  };
+  loadTrainingJobs();
+}
+
+function appendLog(text, cls='') {
+  const box = document.getElementById('log-box');
+  const line = document.createElement('div');
+  line.className = colorClass(text, cls);
+  line.textContent = text;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function colorClass(text, cls) {
+  if (cls) return `log-${cls}`;
+  if (text.includes('[ERROR]')) return 'log-error';
+  if (text.includes('[SUCCESS]')) return 'log-success';
+  if (text.includes('[WARN]')) return 'log-warn';
+  if (text.includes('[TRAIN]')) return 'log-train';
+  return 'log-info';
+}
+
+function parseLossFromLog(text) {
+  const m = text.match(/step=(\d+).*?loss=([\d.]+)/);
+  if (m && lossChart) {
+    const step = parseInt(m[1]);
+    const loss = parseFloat(m[2]);
+    lossChart.data.labels.push(step);
+    lossChart.data.datasets[0].data.push(loss);
+    lossChart.update('none');
+  }
+}
+
+function parseProgressFromLog(text) {
+  const m = text.match(/\[PROGRESS\] step=(\d+) total=(\d+) pct=([\d.]+) elapsed=(\d+) eta=(\d+)/);
+  if (!m) return;
+  const [, step, total, pct, elapsed, eta] = m;
+  const epoch = text.match(/epoch=([\d.]+)/);
+  document.getElementById('train-progress-bar').style.width = pct + '%';
+  document.getElementById('train-step-label').textContent = `Step ${step} / ${total}`;
+  if (epoch) document.getElementById('train-epoch-label').textContent = `Epoch ${parseFloat(epoch[1]).toFixed(2)}`;
+  document.getElementById('train-eta-label').textContent = `ETA: ${fmtDuration(parseInt(eta))}`;
+}
+
+function resetTrainProgress() {
+  const bar = document.getElementById('train-progress-bar');
+  bar.style.width = '0%';
+  bar.className = 'progress-bar bg-primary progress-bar-striped progress-bar-animated';
+  document.getElementById('train-step-label').textContent = 'Step 0 / 0';
+  document.getElementById('train-epoch-label').textContent = 'Epoch 0';
+  document.getElementById('train-eta-label').textContent = 'ETA: --';
+}
+
+function fmtDuration(secs) {
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60), s = secs % 60;
+  if (m < 60) return `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+function clearLog() {
+  document.getElementById('log-box').innerHTML = '';
+  document.getElementById('train-progress-wrap').classList.add('d-none');
+}
+
+function setTrainStatus(status) {
+  const badge = document.getElementById('train-status-badge');
+  badge.className = `badge badge-status-${status}`;
+  badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+async function loadTrainingJobs() {
+  const r = await fetch(`${API}/api/training/jobs`);
+  const jobs = await r.json();
+  const tbody = document.getElementById('train-history');
+  tbody.innerHTML = jobs.length ? jobs.map(j => `
+    <tr>
+      <td><code class="small">${j.id}</code></td>
+      <td class="small">${j.config.base_model || '-'}</td>
+      <td class="small">${j.config.dataset_id || '-'}</td>
+      <td><span class="badge badge-status-${j.status}">${j.status}</span></td>
+      <td class="small text-muted">${new Date(j.created_at).toLocaleString()}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-info" onclick="reloadJobLogs('${j.id}')"><i class="bi bi-terminal"></i></button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="6" class="text-center text-muted py-3">No training jobs yet</td></tr>';
+}
+
+async function reloadJobLogs(jobId) {
+  const r = await fetch(`${API}/api/training/jobs/${jobId}/logs`);
+  const d = await r.json();
+  clearLog();
+  d.logs.forEach(l => appendLog(l));
+}
+
+// ─── Conversion ───────────────────────────────────────────────────────────────
+async function loadOutputAdapters() {
+  const r = await fetch(`${API}/api/models/scan-output`);
+  const models = await r.json();
+  const sel = document.getElementById('conv-adapter-select');
+  sel.innerHTML = '<option value="">-- Select from fine-tuned adapters --</option>' +
+    models.map(m => `<option value="${m.path}" data-type="${m.type}">${m.name} (${m.type})</option>`).join('');
+}
+
+function onAdapterSelect() {
+  const sel = document.getElementById('conv-adapter-select');
+  const val = sel.value;
+  if (val) document.getElementById('conv-source').value = val;
+}
+
+async function startConversion() {
+  const source = document.getElementById('conv-source').value.trim();
+  if (!source) return alert('Enter a source path');
+  const config = {
+    source_path: source,
+    model_name: document.getElementById('conv-base').value || source,
+    quantization: document.getElementById('conv-quant').value,
+    output_name: document.getElementById('conv-out-name').value,
+  };
+  const r = await fetch(`${API}/api/models/convert`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config)
+  });
+  const d = await r.json();
+  if (!r.ok) return alert(d.detail || 'Error');
+
+  appendConvLog(`[INFO] Conversion job started: ${d.job_id}`);
+  if (convJobWs) convJobWs.close();
+  convJobWs = new WebSocket(`ws://${location.host}/ws/${d.job_id}`);
+  convJobWs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'log') appendConvLog(msg.message);
+    if (msg.type === 'status' && msg.status === 'completed') loadGGUFModels();
+  };
+}
+
+function appendConvLog(text) {
+  const box = document.getElementById('conv-log-box');
+  box.textContent += text + '\n';
+  box.scrollTop = box.scrollHeight;
+}
+
+async function loadGGUFModels() {
+  const r = await fetch(`${API}/api/models/gguf`);
+  const models = await r.json();
+  const tbody = document.getElementById('gguf-table');
+  tbody.innerHTML = models.length ? models.map(m => `
+    <tr>
+      <td>${escHtml(m.name)}</td>
+      <td><span class="chip" style="background:#21262d">${m.quantization||'?'}</span></td>
+      <td>${fmtBytes(m.size)}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-info me-1" onclick="useForModelfile('${escHtml(m.path)}','${escHtml(m.name)}')">Use</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteGGUF('${m.id}')"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="4" class="text-center text-muted py-3">No GGUF models yet</td></tr>';
+}
+
+function useForModelfile(path, name) {
+  document.querySelectorAll('[data-page="modelfile"]')[0].click();
+  setTimeout(() => {
+    document.getElementById('mf-model-path').value = path;
+    document.getElementById('mf-name').value = name;
+  }, 100);
+}
+
+async function deleteGGUF(id) {
+  if (!confirm('Delete this GGUF model?')) return;
+  await fetch(`${API}/api/models/gguf/${id}`, { method: 'DELETE' });
+  loadGGUFModels();
+}
+
+// ─── Modelfile ────────────────────────────────────────────────────────────────
+async function loadMfTemplates() {
+  const r = await fetch(`${API}/api/ollama/modelfile-template`);
+  mfTemplates = await r.json();
+}
+
+async function loadMfGGUFModels() {
+  const r = await fetch(`${API}/api/models/gguf`);
+  const models = await r.json();
+  const sel = document.getElementById('mf-model-select');
+  sel.innerHTML = '<option value="">-- Select GGUF model --</option>' +
+    models.map(m => `<option value="${m.path}">${m.name}</option>`).join('');
+}
+
+function onMfModelSelect() {
+  const val = document.getElementById('mf-model-select').value;
+  if (val) document.getElementById('mf-model-path').value = val;
+}
+
+async function loadMfTemplate() {
+  if (!Object.keys(mfTemplates).length) await loadMfTemplates();
+  const tpl = document.getElementById('mf-template-select').value;
+  const modelPath = document.getElementById('mf-model-path').value || '/path/to/model.gguf';
+  let content = mfTemplates[tpl] || '';
+  content = content.replace('{model_path}', modelPath);
+  document.getElementById('mf-editor').value = content;
+}
+
+async function saveModelfile() {
+  const name = document.getElementById('mf-name').value.trim();
+  const content = document.getElementById('mf-editor').value.trim();
+  if (!name) return alert('Enter a modelfile name');
+  if (!content) return alert('Modelfile cannot be empty');
+  const r = await fetch(`${API}/api/models/modelfiles`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, content })
+  });
+  if (!r.ok) return alert('Save failed');
+  loadModelfiles();
+}
+
+async function loadModelfiles() {
+  const r = await fetch(`${API}/api/models/modelfiles`);
+  const mfs = await r.json();
+  const list = document.getElementById('mf-list');
+  list.innerHTML = mfs.length ? mfs.map(m => `
+    <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" style="background:#0d1117;border-color:#30363d;">
+      <span class="small">${escHtml(m.name)}</span>
+      <div>
+        <button class="btn btn-sm btn-outline-secondary me-1" onclick="editModelfile('${m.id}')"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteModelfile('${m.id}')"><i class="bi bi-trash"></i></button>
+      </div>
+    </div>`).join('') : '<div class="list-group-item text-muted small">No modelfiles saved</div>';
+}
+
+async function editModelfile(id) {
+  const r = await fetch(`${API}/api/models/modelfiles`);
+  const mfs = await r.json();
+  const mf = mfs.find(m => m.id === id);
+  if (!mf) return;
+  document.getElementById('mf-name').value = mf.name;
+  document.getElementById('mf-editor').value = mf.content;
+}
+
+async function deleteModelfile(id) {
+  if (!confirm('Delete this modelfile?')) return;
+  await fetch(`${API}/api/models/modelfiles/${id}`, { method: 'DELETE' });
+  loadModelfiles();
+}
+
+async function pushModelfileToOllama() {
+  const name = document.getElementById('mf-name').value.trim();
+  const content = document.getElementById('mf-editor').value.trim();
+  if (!name) return alert('Enter a model name first');
+  if (!content) return alert('Modelfile is empty');
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Creating...';
+  try {
+    const r = await fetch(`${API}/api/ollama/create`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, modelfile_content: content })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Failed');
+    alert(`Model "${name}" created in Ollama!`);
+    loadOllamaModels();
+  } catch(e) {
+    alert(`Error: ${e.message}`);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Create in Ollama';
+  }
+}
+
+function copyModelfile() {
+  navigator.clipboard.writeText(document.getElementById('mf-editor').value);
+}
+
+// ─── Ollama ───────────────────────────────────────────────────────────────────
+async function loadOllamaModels() {
+  const tbody = document.getElementById('ollama-models-table');
+  tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Loading...</td></tr>';
+  try {
+    const r = await fetch(`${API}/api/ollama/models`);
+    const d = await r.json();
+    const models = d.models || [];
+    tbody.innerHTML = models.length ? models.map(m => `
+      <tr>
+        <td>${escHtml(m.name)}</td>
+        <td>${fmtBytes(m.size)}</td>
+        <td class="text-muted small">${m.modified_at ? new Date(m.modified_at).toLocaleDateString() : '?'}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-info me-1" onclick="useForTest('${escHtml(m.name)}')">Test</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteOllamaModel('${escHtml(m.name)}')"><i class="bi bi-trash"></i></button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="4" class="text-center text-muted py-3">No models installed</td></tr>';
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">${e.message}</td></tr>`;
+  }
+}
+
+async function pullOllamaModel() {
+  const name = document.getElementById('pull-model-input').value.trim();
+  if (!name) return alert('Enter a model name');
+  const status = document.getElementById('pull-status');
+  status.innerHTML = '<div class="spinner-border spinner-border-sm me-1" role="status"></div>Pulling (this may take a while)...';
+  try {
+    const r = await fetch(`${API}/api/ollama/pull`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model_name: name })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Failed');
+    status.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>Pulled ${name}</span>`;
+    loadOllamaModels();
+  } catch(e) {
+    status.innerHTML = `<span class="text-danger">Error: ${e.message}</span>`;
+  }
+}
+
+async function deleteOllamaModel(name) {
+  if (!confirm(`Delete Ollama model "${name}"?`)) return;
+  await fetch(`${API}/api/ollama/models/${name}`, { method: 'DELETE' });
+  loadOllamaModels();
+}
+
+// ─── Test Model ───────────────────────────────────────────────────────────────
+async function loadTestModels() {
+  const sel = document.getElementById('test-model-select');
+  try {
+    const r = await fetch(`${API}/api/ollama/models`);
+    const d = await r.json();
+    sel.innerHTML = d.models && d.models.length
+      ? d.models.map(m => `<option value="${escHtml(m.name)}">${escHtml(m.name)}</option>`).join('')
+      : '<option>No Ollama models — pull one first</option>';
+  } catch {
+    sel.innerHTML = '<option>Ollama offline</option>';
+  }
+}
+
+function useForTest(name) {
+  document.querySelectorAll('[data-page="test"]')[0].click();
+  setTimeout(() => {
+    const sel = document.getElementById('test-model-select');
+    for (let opt of sel.options) if (opt.value === name) { sel.value = name; break; }
+  }, 200);
+}
+
+async function sendMessage() {
+  const model = document.getElementById('test-model-select').value;
+  const prompt = document.getElementById('test-prompt').value.trim();
+  if (!prompt) return;
+  const system = document.getElementById('test-system').value;
+  const temp = parseFloat(document.getElementById('test-temp').value);
+  const maxTok = parseInt(document.getElementById('test-max-tokens').value);
+
+  const chat = document.getElementById('chat-messages');
+  chat.innerHTML += `<div class="mb-2"><span class="badge bg-secondary me-1">You</span><span>${escHtml(prompt)}</span></div>`;
+  document.getElementById('test-prompt').value = '';
+  chat.scrollTop = chat.scrollHeight;
+
+  const thinking = document.createElement('div');
+  thinking.className = 'mb-2 text-muted small';
+  thinking.innerHTML = '<div class="spinner-border spinner-border-sm me-1" role="status"></div>Thinking...';
+  chat.appendChild(thinking);
+
+  try {
+    const r = await fetch(`${API}/api/ollama/generate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt, system, temperature: temp, max_tokens: maxTok })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Error');
+    thinking.outerHTML = `<div class="mb-3 p-2 rounded" style="background:#21262d"><span class="badge bg-primary me-1">${escHtml(model)}</span><div class="mt-1">${escHtml(d.response)}</div><div class="text-muted small mt-1">${d.eval_count} tokens</div></div>`;
+  } catch(e) {
+    thinking.outerHTML = `<div class="text-danger mb-2">${e.message}</div>`;
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  const u = ['B','KB','MB','GB'];
+  let i = 0;
+  while (b >= 1024 && i < u.length-1) { b /= 1024; i++; }
+  return `${b.toFixed(1)} ${u[i]}`;
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Pre-train ────────────────────────────────────────────────────────────────
+let ptLossChart = null;
+let ptPplChart = null;
+let ptJobWs = null;
+const PT_PRESETS = {
+  nano:   { n_layer:4,  n_head:4,  n_embd:256,  n_positions:512,  label:'Nano',   badge:'~7M',   color:'#3fb950', note:'CPU friendly · minutes' },
+  tiny:   { n_layer:6,  n_head:6,  n_embd:384,  n_positions:512,  label:'Tiny',   badge:'~17M',  color:'#58a6ff', note:'CPU/GPU · tens of minutes' },
+  small:  { n_layer:12, n_head:12, n_embd:768,  n_positions:1024, label:'Small',  badge:'~125M', color:'#e3b341', note:'GPU needed · hours' },
+  medium: { n_layer:24, n_head:16, n_embd:1024, n_positions:1024, label:'Medium', badge:'~350M', color:'#f85149', note:'GPU 12GB+ · days' },
+};
+let selectedPreset = 'tiny';
+
+function renderPresetCards() {
+  const container = document.getElementById('preset-cards');
+  container.innerHTML = Object.entries(PT_PRESETS).map(([key, p]) => `
+    <div class="col-6">
+      <div class="card preset-card ${key===selectedPreset?'selected':''}" data-preset="${key}"
+        onclick="selectPreset('${key}')"
+        style="cursor:pointer;border:2px solid ${key===selectedPreset?p.color:'#30363d'};transition:all 0.15s;">
+        <div class="card-body py-2 px-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="fw-600" style="color:${p.color}">${p.label}</span>
+            <span class="badge" style="background:${p.color}22;color:${p.color}">${p.badge}</span>
+          </div>
+          <div class="small text-muted">${p.note}</div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function selectPreset(key) {
+  selectedPreset = key;
+  renderPresetCards();
+  if (key === 'custom') return;
+  const p = PT_PRESETS[key];
+  if (!p) return;
+  document.getElementById('pt-n-layer').value = p.n_layer;
+  document.getElementById('pt-n-head').value  = p.n_head;
+  document.getElementById('pt-n-embd').value  = p.n_embd;
+  document.getElementById('pt-n-pos').value   = p.n_positions;
+  updateParamCount();
+}
+
+function updateParamCount() {
+  const nL = parseInt(document.getElementById('pt-n-layer').value) || 6;
+  const nH = parseInt(document.getElementById('pt-n-head').value)  || 6;
+  const nE = parseInt(document.getElementById('pt-n-embd').value)  || 384;
+  const nP = parseInt(document.getElementById('pt-n-pos').value)   || 512;
+  const vS = parseInt(document.getElementById('pt-vocab').value)   || 8000;
+
+  // GPT-2 param estimate: per block = attn(4*nE^2) + mlp(8*nE^2) + ln(4*nE) ≈ 12*nE^2
+  const params = nL * 12 * nE * nE + 2 * vS * nE;
+  const paramStr = params >= 1e9 ? `${(params/1e9).toFixed(2)}B`
+                 : params >= 1e6 ? `${(params/1e6).toFixed(1)}M`
+                 : `${(params/1e3).toFixed(0)}K`;
+
+  // VRAM estimate: ~16 bytes/param for full precision training (params + grad + optimizer)
+  const vramGB = params * 16 / 1e9;
+  const vramStr = vramGB < 1 ? `${(vramGB*1024).toFixed(0)}MB` : `${vramGB.toFixed(1)}GB`;
+
+  const device = vramGB < 0.5 ? 'CPU' : vramGB < 4 ? 'CPU/GPU' : vramGB < 12 ? 'GPU 6GB+' : 'GPU 16GB+';
+
+  document.getElementById('pt-param-count').textContent = paramStr;
+  document.getElementById('pt-vram-est').textContent = vramStr;
+  document.getElementById('pt-device-rec').textContent = device;
+}
+
+function toggleTokInfo() {
+  const checked = document.getElementById('pt-train-tok').checked;
+  document.getElementById('pt-tok-info').classList.toggle('d-none', !checked);
+  document.getElementById('pt-gpt2-tok-info').classList.toggle('d-none', checked);
+}
+
+function initPtCharts() {
+  const chartDefaults = {
+    type: 'line',
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { labels: { color: '#c9d1d9', boxWidth: 10, font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8b949e', maxTicksLimit: 6 }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#8b949e', maxTicksLimit: 5 }, grid: { color: '#21262d' } }
+      }
+    }
+  };
+
+  ptLossChart = new Chart(document.getElementById('pt-loss-chart').getContext('2d'), {
+    ...JSON.parse(JSON.stringify(chartDefaults)),
+    data: { labels: [], datasets: [{ label: 'Loss', data: [], borderColor: '#f85149', backgroundColor: '#f8514922', fill: true, tension: 0.4, pointRadius: 0 }] }
+  });
+  ptPplChart = new Chart(document.getElementById('pt-ppl-chart').getContext('2d'), {
+    ...JSON.parse(JSON.stringify(chartDefaults)),
+    data: { labels: [], datasets: [{ label: 'Perplexity', data: [], borderColor: '#e3b341', backgroundColor: '#e3b34122', fill: true, tension: 0.4, pointRadius: 0 }] }
+  });
+}
+
+function appendPtLog(text) {
+  const box = document.getElementById('pt-log-box');
+  const line = document.createElement('div');
+  const cls = text.includes('[ERROR]')   ? 'log-error'
+             : text.includes('[SUCCESS]') ? 'log-success'
+             : text.includes('[WARN]')    ? 'log-warn'
+             : text.includes('[PRETRAIN]')? 'log-train'
+             : 'log-info';
+  line.className = cls;
+  line.textContent = text;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+
+  // Parse [PRETRAIN] step=N/M loss=X ppl=Y
+  const m = text.match(/\[PRETRAIN\].*?step=(\d+).*?loss=([\d.]+).*?ppl=([\d.]+)/);
+  if (m && ptLossChart && ptPplChart) {
+    const step = parseInt(m[1]);
+    const loss = parseFloat(m[2]);
+    const ppl  = parseFloat(m[3]);
+    ptLossChart.data.labels.push(step);
+    ptLossChart.data.datasets[0].data.push(loss);
+    ptLossChart.update('none');
+    ptPplChart.data.labels.push(step);
+    ptPplChart.data.datasets[0].data.push(ppl);
+    ptPplChart.update('none');
+  }
+}
+
+async function loadPretrainDatasets() {
+  const r = await fetch(`${API}/api/datasets/`);
+  const ds = await r.json();
+  const sel = document.getElementById('pt-dataset');
+  sel.innerHTML = ds.length
+    ? ds.map(d => `<option value="${d.id}">${escHtml(d.name)} (${d.rows} rows)</option>`).join('')
+    : '<option>No datasets — upload one first</option>';
+}
+
+async function startPretrain() {
+  const dsId = document.getElementById('pt-dataset').value;
+  if (!dsId) return alert('Select a training corpus dataset');
+  const modelName = document.getElementById('pt-model-name').value.trim() || 'my-llm';
+
+  const config = {
+    dataset_id:  dsId,
+    model_name:  modelName,
+    preset:      selectedPreset,
+    n_layer:     parseInt(document.getElementById('pt-n-layer').value),
+    n_head:      parseInt(document.getElementById('pt-n-head').value),
+    n_embd:      parseInt(document.getElementById('pt-n-embd').value),
+    n_positions: parseInt(document.getElementById('pt-n-pos').value),
+    vocab_size:  parseInt(document.getElementById('pt-vocab').value),
+    train_tokenizer: document.getElementById('pt-train-tok').checked,
+    num_steps:   parseInt(document.getElementById('pt-steps').value),
+    batch_size:  parseInt(document.getElementById('pt-batch').value),
+    learning_rate: parseFloat(document.getElementById('pt-lr').value),
+    weight_decay:  0.1,
+    warmup_steps:  parseInt(document.getElementById('pt-warmup').value),
+    gradient_accumulation: parseInt(document.getElementById('pt-grad-acc').value),
+    save_every:  parseInt(document.getElementById('pt-save-every').value),
+    grad_clip:   1.0,
+    use_fp16:    document.getElementById('pt-fp16').checked,
+  };
+
+  document.getElementById('pt-log-box').innerHTML = '';
+  ptLossChart.data.labels = []; ptLossChart.data.datasets[0].data = []; ptLossChart.update();
+  ptPplChart.data.labels  = []; ptPplChart.data.datasets[0].data  = []; ptPplChart.update();
+
+  const badge = document.getElementById('pt-status-badge');
+  badge.className = 'badge badge-status-running'; badge.textContent = 'Running';
+
+  const r = await fetch(`${API}/api/pretrain/start`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(config)
+  });
+  const d = await r.json();
+  if (!r.ok) return alert(d.detail || 'Error starting pre-training');
+
+  appendPtLog(`[INFO] Pre-training job started: ${d.job_id}`);
+  appendPtLog(`[INFO] Architecture: ${config.n_layer}L / ${config.n_head}H / ${config.n_embd}D  Preset: ${selectedPreset}`);
+
+  if (ptJobWs) ptJobWs.close();
+  ptJobWs = new WebSocket(`ws://${location.host}/ws/${d.job_id}`);
+  ptJobWs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'log') appendPtLog(msg.message);
+    if (msg.type === 'status') {
+      badge.className = `badge badge-status-${msg.status}`;
+      badge.textContent = msg.status.charAt(0).toUpperCase() + msg.status.slice(1);
+      if (msg.status === 'completed') loadPretrainCheckpoints();
+    }
+  };
+}
+
+async function loadPretrainCheckpoints() {
+  const r = await fetch(`${API}/api/pretrain/checkpoints`);
+  const models = await r.json();
+  const tbody = document.getElementById('pt-checkpoints-table');
+  tbody.innerHTML = models.length ? models.map(m => {
+    const params = m.params ? (m.params >= 1e9 ? `${(m.params/1e9).toFixed(2)}B` : `${(m.params/1e6).toFixed(1)}M`) : '?';
+    const arch = `${m.n_layer}L/${m.n_embd}D`;
+    const ckptBadges = m.checkpoints.length
+      ? m.checkpoints.map(c => `<span class="chip me-1" style="background:#21262d">${c}</span>`).join('')
+      : '<span class="text-muted small">none</span>';
+    return `<tr>
+      <td><strong>${escHtml(m.name)}</strong>${m.has_tokenizer ? ' <span class="chip" style="background:#1f6feb33;color:#58a6ff">tok</span>' : ''}</td>
+      <td class="text-info">${params}</td>
+      <td class="small text-muted">${arch}</td>
+      <td class="small">${ckptBadges}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-info me-1" title="Use for GGUF conversion"
+          onclick="useForConversion('${escHtml(m.path)}','${escHtml(m.name)}')">Convert</button>
+      </td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="5" class="text-center text-muted py-3">No pre-trained models yet</td></tr>';
+}
+
+function useForConversion(path, name) {
+  document.querySelectorAll('[data-page="convert"]')[0].click();
+  setTimeout(() => {
+    document.getElementById('conv-source').value = path;
+    document.getElementById('conv-out-name').value = name;
+  }, 150);
+}
+
+// ─── Distill tab navigation ───────────────────────────────────────────────────
+document.querySelectorAll('[data-distill-tab]').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const tab = link.dataset.distillTab;
+    document.querySelectorAll('[data-distill-tab]').forEach(l => l.classList.remove('active'));
+    link.classList.add('active');
+    ['generate','kd','history'].forEach(t => {
+      document.getElementById('distill-tab-' + t).classList.toggle('d-none', t !== tab);
+    });
+    if (tab === 'history') loadDistillHistory();
+    if (tab === 'kd') loadDistillDatasets();
+  });
+});
+
+// ─── Distill: Generate Dataset ────────────────────────────────────────────────
+let genJobId = null;
+let genJobWs = null;
+let lastGeneratedDatasetId = null;
+
+function toggleGenSource() {
+  const src = document.getElementById('gen-source-type').value;
+  document.getElementById('gen-dataset-row').classList.toggle('d-none', src !== 'dataset');
+  document.getElementById('gen-inline-row').classList.toggle('d-none', src !== 'inline');
+}
+
+async function loadDistillOllamaModels() {
+  const sel = document.getElementById('gen-teacher-model');
+  try {
+    const r = await fetch(`${API}/api/ollama/models`);
+    const d = await r.json();
+    sel.innerHTML = d.models && d.models.length
+      ? d.models.map(m => `<option value="${escHtml(m.name)}">${escHtml(m.name)}</option>`).join('')
+      : '<option value="">No Ollama models — pull one in the Ollama tab</option>';
+  } catch {
+    sel.innerHTML = '<option value="">Ollama offline</option>';
+  }
+}
+
+async function loadDistillDatasets() {
+  const r = await fetch(`${API}/api/datasets/`);
+  const ds = await r.json();
+  const opts = ds.map(d => `<option value="${d.id}">${escHtml(d.name)} (${d.rows} rows)</option>`).join('');
+  ['gen-dataset-select', 'kd-dataset-select'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = opts || '<option>No datasets</option>';
+  });
+}
+
+function appendGenLog(text) {
+  const box = document.getElementById('gen-log-box');
+  const cls = text.includes('[ERROR]') ? 'log-error'
+             : text.includes('[SUCCESS]') ? 'log-success'
+             : text.includes('[WARN]') ? 'log-warn'
+             : text.includes('[TEACHER]') ? 'log-train'
+             : 'log-info';
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = text;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function startGenerateDataset() {
+  const teacher = document.getElementById('gen-teacher-model').value;
+  if (!teacher) return alert('Select a teacher model');
+  const src = document.getElementById('gen-source-type').value;
+
+  const config = {
+    teacher_ollama_model: teacher,
+    prompts_source: src,
+    dataset_id: src === 'dataset' ? document.getElementById('gen-dataset-select').value : '',
+    inline_prompts: src === 'inline'
+      ? document.getElementById('gen-inline-prompts').value.split('\n').map(l => l.trim()).filter(Boolean)
+      : [],
+    system_prompt: document.getElementById('gen-system-prompt').value,
+    output_name: document.getElementById('gen-output-name').value || 'teacher_generated',
+    temperature: parseFloat(document.getElementById('gen-temp').value),
+    max_tokens: parseInt(document.getElementById('gen-max-tokens').value),
+    prompt_field: document.getElementById('gen-prompt-field').value || 'instruction',
+  };
+
+  if (src === 'inline' && config.inline_prompts.length === 0)
+    return alert('Enter at least one prompt');
+  if (src === 'dataset' && !config.dataset_id)
+    return alert('Select a dataset');
+
+  document.getElementById('gen-log-box').innerHTML = '';
+  document.getElementById('gen-result-banner').classList.add('d-none');
+  const badge = document.getElementById('gen-status-badge');
+  badge.className = 'badge badge-status-running'; badge.textContent = 'Running';
+
+  const r = await fetch(`${API}/api/distill/generate-dataset`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(config)
+  });
+  const d = await r.json();
+  if (!r.ok) return alert(d.detail || 'Error');
+  genJobId = d.job_id;
+
+  if (genJobWs) genJobWs.close();
+  genJobWs = new WebSocket(`ws://${location.host}/ws/${genJobId}`);
+  genJobWs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'log') appendGenLog(msg.message);
+    if (msg.type === 'status') {
+      badge.className = `badge badge-status-${msg.status}`;
+      badge.textContent = msg.status.charAt(0).toUpperCase() + msg.status.slice(1);
+      if (msg.status === 'completed' && msg.dataset_id) {
+        lastGeneratedDatasetId = msg.dataset_id;
+        document.getElementById('gen-result-text').textContent =
+          `${msg.rows} samples saved as dataset ${msg.dataset_id}`;
+        document.getElementById('gen-result-banner').classList.remove('d-none');
+        loadDistillDatasets();
+        loadDatasets();
+      }
+    }
+  };
+}
+
+function useGeneratedDataset() {
+  document.querySelectorAll('[data-distill-tab="kd"]')[0].click();
+  if (lastGeneratedDatasetId) {
+    setTimeout(() => {
+      const sel = document.getElementById('kd-dataset-select');
+      for (let opt of sel.options) {
+        if (opt.value === lastGeneratedDatasetId) { sel.value = lastGeneratedDatasetId; break; }
+      }
+    }, 200);
+  }
+}
+
+// ─── Distill: KD Training ─────────────────────────────────────────────────────
+let kdJobWs = null;
+let kdLossChart = null;
+
+function initKDLossChart() {
+  const ctx = document.getElementById('kd-loss-chart').getContext('2d');
+  kdLossChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'CE Loss', data: [], borderColor: '#f85149', backgroundColor: '#f8514922', fill: true, tension: 0.3, pointRadius: 2 },
+        { label: 'KD Loss', data: [], borderColor: '#58a6ff', backgroundColor: '#58a6ff22', fill: true, tension: 0.3, pointRadius: 2 },
+        { label: 'Total',   data: [], borderColor: '#3fb950', backgroundColor: '#3fb95022', fill: false, tension: 0.3, pointRadius: 2, borderDash: [4,2] },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#c9d1d9', boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }
+      }
+    }
+  });
+}
+
+// Live-update the loss formula display
+['kd-alpha','kd-temp'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', updateKDFormula);
+});
+
+function updateKDFormula() {
+  const alpha = parseFloat(document.getElementById('kd-alpha').value) || 0.5;
+  const temp  = parseFloat(document.getElementById('kd-temp').value) || 4.0;
+  document.getElementById('kd-alpha-display').textContent = alpha.toFixed(2);
+  document.getElementById('kd-alpha-inv-display').textContent = (1 - alpha).toFixed(2);
+  document.getElementById('kd-temp-display').textContent = temp.toFixed(1);
+}
+
+function appendKDLog(text) {
+  const box = document.getElementById('kd-log-box');
+  const cls = text.includes('[ERROR]') ? 'log-error'
+             : text.includes('[SUCCESS]') ? 'log-success'
+             : text.includes('[WARN]') ? 'log-warn'
+             : text.includes('[DISTILL]') ? 'log-train'
+             : 'log-info';
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = text;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+
+  // Parse loss metrics from [DISTILL] lines
+  const m = text.match(/step=(\d+).*?ce=([\d.]+).*?kd=([\d.]+).*?total=([\d.]+)/);
+  if (m && kdLossChart) {
+    const step = parseInt(m[1]);
+    const ce   = parseFloat(m[2]);
+    const kd   = parseFloat(m[3]);
+    const tot  = parseFloat(m[4]);
+    kdLossChart.data.labels.push(step);
+    kdLossChart.data.datasets[0].data.push(ce);
+    kdLossChart.data.datasets[1].data.push(kd);
+    kdLossChart.data.datasets[2].data.push(tot);
+    kdLossChart.update('none');
+  }
+}
+
+async function startKDTraining() {
+  const teacher = document.getElementById('kd-teacher').value.trim();
+  const student = document.getElementById('kd-student').value.trim();
+  const dsId    = document.getElementById('kd-dataset-select').value;
+  if (!teacher) return alert('Enter a teacher model');
+  if (!student) return alert('Enter a student model');
+  if (!dsId) return alert('Select a dataset');
+
+  const config = {
+    teacher_model: teacher,
+    student_model: student,
+    dataset_id: dsId,
+    output_name: document.getElementById('kd-output-name').value || 'distilled-student',
+    temperature: parseFloat(document.getElementById('kd-temp').value),
+    alpha: parseFloat(document.getElementById('kd-alpha').value),
+    lora_r: parseInt(document.getElementById('kd-lora-r').value),
+    lora_alpha: parseInt(document.getElementById('kd-lora-alpha').value),
+    num_epochs: parseInt(document.getElementById('kd-epochs').value),
+    batch_size: parseInt(document.getElementById('kd-batch').value),
+    learning_rate: parseFloat(document.getElementById('kd-lr').value),
+    max_seq_length: parseInt(document.getElementById('kd-seqlen').value),
+    gradient_accumulation: 4,
+    warmup_steps: 10,
+    use_4bit_student: document.getElementById('kd-4bit-student').checked,
+    use_4bit_teacher: document.getElementById('kd-4bit-teacher').checked,
+    instruction_template: document.getElementById('kd-template').value,
+    lora_dropout: 0.05,
+  };
+
+  document.getElementById('kd-log-box').innerHTML = '';
+  kdLossChart.data.labels = [];
+  kdLossChart.data.datasets.forEach(ds => ds.data = []);
+  kdLossChart.update();
+
+  const badge = document.getElementById('kd-status-badge');
+  badge.className = 'badge badge-status-running'; badge.textContent = 'Running';
+
+  const r = await fetch(`${API}/api/distill/start`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(config)
+  });
+  const d = await r.json();
+  if (!r.ok) return alert(d.detail || 'Error');
+
+  appendKDLog(`[INFO] Distillation job started: ${d.job_id}`);
+  appendKDLog(`[INFO] Teacher: ${teacher}  →  Student: ${student}`);
+
+  if (kdJobWs) kdJobWs.close();
+  kdJobWs = new WebSocket(`ws://${location.host}/ws/${d.job_id}`);
+  kdJobWs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'log') appendKDLog(msg.message);
+    if (msg.type === 'status') {
+      badge.className = `badge badge-status-${msg.status}`;
+      badge.textContent = msg.status.charAt(0).toUpperCase() + msg.status.slice(1);
+    }
+  };
+}
+
+// ─── Distill: History ─────────────────────────────────────────────────────────
+async function loadDistillHistory() {
+  const r = await fetch(`${API}/api/distill/jobs`);
+  const jobs = await r.json();
+  const tbody = document.getElementById('distill-history-table');
+  tbody.innerHTML = jobs.length ? jobs.map(j => {
+    const cfg = j.config;
+    const summary = j.type === 'distill_generate'
+      ? `Teacher: ${cfg.teacher_ollama_model || '?'}`
+      : `${cfg.teacher_model?.split('/').pop() || '?'} → ${cfg.student_model?.split('/').pop() || '?'}`;
+    return `<tr>
+      <td><code class="small">${j.id}</code></td>
+      <td><span class="chip" style="background:#21262d">${j.type === 'distill_generate' ? 'gen-dataset' : 'kd-train'}</span></td>
+      <td class="small text-muted">${escHtml(summary)}</td>
+      <td><span class="badge badge-status-${j.status}">${j.status}</span></td>
+      <td class="small text-muted">${new Date(j.created_at).toLocaleString()}</td>
+      <td><button class="btn btn-sm btn-outline-info" onclick="showDistillJobLogs('${j.id}')"><i class="bi bi-terminal"></i></button></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="text-center text-muted py-3">No distillation jobs yet</td></tr>';
+}
+
+async function showDistillJobLogs(jobId) {
+  const r = await fetch(`${API}/api/distill/jobs/${jobId}/logs`);
+  const d = await r.json();
+  document.querySelectorAll('[data-distill-tab="kd"]')[0].click();
+  document.getElementById('kd-log-box').innerHTML = '';
+  d.logs.forEach(l => appendKDLog(l));
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+initLossChart();
+initKDLossChart();
+initPtCharts();
+renderPresetCards();
+updateParamCount();
+loadDashboard();
+</script>
+</body>
+</html>

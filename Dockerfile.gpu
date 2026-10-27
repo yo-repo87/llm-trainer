@@ -1,0 +1,32 @@
+FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-devel
+
+RUN apt-get update && apt-get install -y \
+    git wget curl build-essential cmake ninja-build \
+    libopenblas-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Build llama.cpp with CUDA support
+RUN git clone --depth=1 https://github.com/ggerganov/llama.cpp /app/llama.cpp && \
+    cd /app/llama.cpp && \
+    cmake -B build -DGGML_CUDA=ON -DBUILD_SHARED_LIBS=OFF -DGGML_OPENMP=OFF -DCMAKE_CUDA_ARCHITECTURES=86 && \
+    cmake --build build --config Release -j$(nproc) --target llama-quantize llama-cli && \
+    pip install --no-cache-dir -r /app/llama.cpp/requirements.txt && \
+    pip install --no-cache-dir torch==2.2.0 --index-url https://download.pytorch.org/whl/cu121 --force-reinstall
+
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+
+RUN mkdir -p data/datasets data/models data/output data/modelfiles
+
+EXPOSE 8000
+
+ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/app/data/hf_cache
+ENV TRANSFORMERS_CACHE=/app/data/hf_cache
+
+CMD ["python", "backend/main.py"]
